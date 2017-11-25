@@ -1,9 +1,12 @@
 # about
-This is a functional code that shows how to perform an unzip with java of a non trivial zip file, that takes into account
-that a given zip file might have **sub-directories** and those need to be restored, the **file permissions** of the files need to be restored,
-the **files might be symlinks** that needs to be recreated and for large files the **usage of parallelism** helps a lot.
+This is a functional java code that shows how to perform an unzip of a non-trivial file
 
-the code makes use of apache commons compress since is the best way to read the extra fields where the file permissions are stores in the zip files and translate the bytes into unix permissions
+- it takes into account that a given zip file might have **sub-directories** and those are restored
+- the **file permissions** of the files are restored (unix like OSs only)
+- the **files might be symlinks** that needs to be recreated (unix like OSs only)
+- makes **usage of parallelism** (at least 50% faster than 7zip ;) )
+
+the code uses apache commons compress since it is the best way (in Java) to read and translate bytes from the extra fields where the file permissions are stored to later on translate them into unix permissions
 
 # zip
 java unzip/zip class using apache commons compress
