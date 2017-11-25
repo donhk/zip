@@ -20,3 +20,6 @@ the code uses apache commons compress since it is the best way (in Java) to read
 
 # usage
 ```java -jar zipper.jar /path/to/file.zip /path/to/target/directory```
+# coming soon
+* compression
+* support for other formats such as tar/gz/7zip etc
