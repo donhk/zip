@@ -1,3 +1,39 @@
+/* Copyright (c) 2017 Frederick Alvarez
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+
+/*
+   DESCRIPTION
+    Class in charge of decompress a zip file on a target directory
+
+   PRIVATE CLASSES
+    N/A
+
+   NOTES
+    N/A
+
+   MODIFIED  (MM/DD/YY)
+    donhk     11/25/17 - Creation
+ */
 package com.donhk.Zip;
 
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
@@ -13,6 +49,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * @author donhk
+ */
 public class Zip {
 
     private ZipFile myZip;
@@ -20,9 +59,10 @@ public class Zip {
     private CountDownLatch latch = new CountDownLatch(0);
     private final File zipFile;
     private final File targetPath;
-    private int totalFiles = 0; //total files that will be processed
-    private boolean IS_WINDOWS = System.getProperty("os.name").contains("windows");
-    
+    private long totalFiles = 0; //total files that will be processed
+    private List<ZipJob> zipJobs = new ArrayList<>();
+    private boolean IS_WINDOWS = System.getProperty("os.name").toLowerCase().contains("windows");
+
     //Unix file flags
     private final int S_IRUSR = 256;   // OWNER_READ
     private final int S_IWUSR = 128;   // OWNER_WRITE
@@ -39,16 +79,10 @@ public class Zip {
         this.targetPath = new File(targetPath);
     }
 
-    /**
-     * Decompress using the Java's Zip API, this method doesn't work properly on UNIX like OS
-     * due to the lack of support to read the permissions of the files and thus they can't be
-     * restored to the values they had prior the compression and that is way this is only used
-     * as a primary option for Windows
-     *
-     * @return true if the unzip was successfully, false otherwise
-     * @throws IOException if there was a problem creating the process that calls the unzip or IO error
-     */
-    private boolean decompressFile() throws IOException, InterruptedException {
+    public boolean prepare() throws IOException {
+        if (!validateZipFile()) {
+            return false;
+        }
         // create output directory if it doesn't exist
         if (!targetPath.exists()) {
             if (!targetPath.mkdirs()) {
@@ -56,10 +90,8 @@ public class Zip {
                 return false;
             }
         }
-        List<ZipJob> zipJobs = new ArrayList<>();
-        int cores = 4;
-        ExecutorService executor = Executors.newFixedThreadPool(cores);
-        System.out.println("Analyzing zip file " + zipFile.getAbsolutePath());
+
+        System.out.println("Reading zip file " + zipFile.getAbsolutePath());
         myZip = new ZipFile(zipFile);
         Enumeration<? extends ZipArchiveEntry> zipFileEntries = myZip.getEntries();
         int filesRemaining = 0;
@@ -74,41 +106,40 @@ public class Zip {
         }
         totalFiles = filesRemaining;
         latch = new CountDownLatch(filesRemaining);
-        System.out.println("start unzipping: " + zipFile.getAbsolutePath() + " on " + targetPath);
-
-        executor.invokeAll(zipJobs);
-        latch.await();
-        executor.shutdown();
-
         return true;
     }
 
     /**
-     * Unzips the file
+     * Decompress using the Apaches's Zip API + homemade code which gives support for permission
+     * restoration, symlinks handling and parallelism
      *
      * @return true if the file extraction was successfully, false otherwise
      * @throws IOException          if there was a problem creating the process that calls the unzip or IO error
      * @throws InterruptedException if the operation was interrupted finishes
      */
     public boolean unzipFile() throws IOException, InterruptedException {
-        //validate zip file
-        if (!validateZipFile()) {
-            return false;
+        int cores = Runtime.getRuntime().availableProcessors();
+        if (cores > 8) {
+            cores = 8;
         }
-        //decompress file
-        return decompressFile();
+        ExecutorService executor = Executors.newFixedThreadPool(cores);
+        executor.invokeAll(zipJobs);
+        latch.await();
+        executor.shutdown();
+        return true;
     }
 
     /**
-     * number of files remaining that will be decompressed, this only works on windows
-     *
-     * @return number of files remaining to be processed
+     * @return number of files remaining of being decompressed
      */
-    public int getFilesRemaining() {
-        return (int) latch.getCount();
+    public long getFilesRemaining() {
+        return latch.getCount();
     }
 
-    public int getTotalFiles() {
+    /**
+     * @return total files which will be unzipped
+     */
+    public long getTotalFiles() {
         return totalFiles;
     }
 
@@ -211,40 +242,45 @@ public class Zip {
             this.entry = entry;
         }
 
-        public String call() throws Exception {
-            String fileName = entry.getName();
-            File destFile = new File(targetPath, fileName);
-            File destinationParent = destFile.getParentFile();
-            //recreate original structure
-            destinationParent.mkdirs();
+        public String call() {
+            try {
+                String fileName = entry.getName();
+                File destFile = new File(targetPath, fileName);
+                File destinationParent = destFile.getParentFile();
+                //recreate original structure
+                destinationParent.mkdirs();
 
-            if (entry.isUnixSymlink() && !IS_WINDOWS) {
-                Files.createSymbolicLink(destFile.toPath(), Paths.get(myZip.getUnixSymlink(entry)));
-            } else {
-                BufferedInputStream is = new BufferedInputStream(myZip.getInputStream(entry));
-                int currentByte;
-                // establish buffer for writing file
-                byte data[] = new byte[BUFFER];
+                if (entry.isUnixSymlink() && !IS_WINDOWS) {
+                    Files.createSymbolicLink(destFile.toPath(), Paths.get(myZip.getUnixSymlink(entry)));
+                } else {
+                    BufferedInputStream is = new BufferedInputStream(myZip.getInputStream(entry));
+                    int currentByte;
+                    // establish buffer for writing file
+                    byte data[] = new byte[BUFFER];
 
-                // write the current file to disk
-                FileOutputStream fos = new FileOutputStream(destFile);
-                BufferedOutputStream dest = new BufferedOutputStream(fos, BUFFER);
+                    // write the current file to disk
+                    FileOutputStream fos = new FileOutputStream(destFile);
+                    BufferedOutputStream dest = new BufferedOutputStream(fos, BUFFER);
 
-                // read and write until last byte is encountered
-                while ((currentByte = is.read(data, 0, BUFFER)) != -1) {
-                    dest.write(data, 0, currentByte);
+                    // read and write until last byte is encountered
+                    while ((currentByte = is.read(data, 0, BUFFER)) != -1) {
+                        dest.write(data, 0, currentByte);
+                    }
+                    dest.flush();
+                    dest.close();
+                    is.close();
+
+                    //restore permissions if this is not windows
+                    if (!IS_WINDOWS) {
+                        restorePermissions(entry.getUnixMode(), destFile.getAbsolutePath());
+                    }
                 }
-                dest.flush();
-                dest.close();
-                is.close();
-
-                //restore permissions if this is not windows
-                if (!IS_WINDOWS) {
-                    restorePermissions(entry.getUnixMode(), destFile.getAbsolutePath());
-                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                latch.countDown();
             }
-            latch.countDown();
-            return destFile.getAbsolutePath();
+            return "done";
         }
     }
 
