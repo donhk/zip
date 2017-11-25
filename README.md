@@ -10,7 +10,7 @@ the code uses apache commons compress since it is the best way (in Java) to read
 
 # system requiremnts 
 * Java 1.8 or higher
-* Maven 3.5
+* Maven 3.5 or higher
 
 # steps to create the jar
 1. install java
@@ -19,7 +19,23 @@ the code uses apache commons compress since it is the best way (in Java) to read
 4. execute ```mvn package```
 
 # usage
-```java -jar zipper.jar /path/to/file.zip /path/to/target/directory```
+```$  java -jar target/zipper.jar -h
+-- HELP --
+usage: java -jar zipper.jar -i /path/to/file.zip -o /path/to/dir
+decompress
+ -i,--input <arg>    Path to file that will be decompressed
+ -o,--output <arg>   Output directory
+
+usage: java -jar zipper.jar -c /path/to/file.zip -t /path/to/dir
+compress
+ -c,--create <arg>   Path to file that will be created
+ -t,--target <arg>   Target file/directory that will be compressed
+
+usage: java -jar zipper.jar -h
+help
+ -h,--help   Shows this message
+ ```
+ 
 # coming soon
 * compression
 * support for other formats such as tar/gz/7zip etc
