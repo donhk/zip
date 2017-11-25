@@ -16,7 +16,7 @@ java unzip/zip class using apache commons compress
 1. install java
 2. install maven
 3. clone project
-4. execute mvn package
+4. execute ```mvn package```
 
 # usage
 ```java -jar zipper.jar /path/to/file.zip /path/to/target/directory```
