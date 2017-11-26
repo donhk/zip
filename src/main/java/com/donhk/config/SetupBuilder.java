@@ -41,6 +41,7 @@ public class SetupBuilder {
         cPrint(String.join("", Collections.nCopies(30, " ")));
         //show progress
         while (jZip.getFilesRemaining() != 0) {
+            cPrint(String.join("", Collections.nCopies(30, " ")));
             cPrint(jZip.getFilesRemaining() + "/" + jZip.getTotalFiles());
             Thread.sleep(30);
         }

@@ -14,7 +14,7 @@ public class Main {
             SetupBuilder setupBuilder = new SetupBuilder(cliValidator.getSettings());
             if (cliValidator.getSettings().isDecompress()) {
                 setupBuilder.decompress();
-            } else {
+            } else if (cliValidator.getSettings().isCompress()) {
                 setupBuilder.compress();
             }
 

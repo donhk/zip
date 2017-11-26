@@ -1,16 +1,67 @@
 package com.donhk.config;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import org.apache.commons.cli.*;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.util.HashMap;
 
 public class CliValidator {
 
     private String[] args;
     private Settings settings = new Settings();
+    private Multimap<String, Long> allowedFileTypes = ArrayListMultimap.create();
 
     public CliValidator(String[] args) {
         this.args = args;
+        allowedFileTypes.put("zip", 0x504B0304L);
+        allowedFileTypes.put("zip", 0x504B0506L);
+        allowedFileTypes.put("zip", 0x504B0708L);
+        allowedFileTypes.put("7z", 0x377ABCAF271CL);
+        allowedFileTypes.put("tar", 0x1F8BL); //gzip
+        allowedFileTypes.put("tar.gz", 0x1F8BL); //gzip
+        allowedFileTypes.put("bz2", 0x425A68L);//bzip2
+        allowedFileTypes.put("z", 0x1F9DL);//using Lempel-Ziv-Welch algorithm
+        allowedFileTypes.put("tar.z", 0x1F9DL);//using Lempel-Ziv-Welch algorithm
+        allowedFileTypes.put("XZ", 0L);
+        allowedFileTypes.put("lzma", 0L);
+        allowedFileTypes.put("arj", 0L);
+    }
+
+    private boolean isFileAllowed(File file) {
+        RandomAccessFile raf = null;
+        try {
+            //all zip files must start with the above signature
+            //if they are valid zip files
+            raf = new RandomAccessFile(file, "r");
+            long firsBytes = raf.readInt();
+            for (String fileType : allowedFileTypes.keySet()) {
+                for (long sign : allowedFileTypes.get(fileType)) {
+                    if (sign == firsBytes) {
+                        System.out.println("File is allowed " + fileType);
+                    }
+                }
+
+            }
+
+        } catch (FileNotFoundException e) {
+            return false;
+        } catch (IOException ioex) {
+            return false;
+        } finally {
+            if (raf != null) {
+                try {
+                    raf.close();
+                } catch (IOException e) {
+                    //ignored
+                }
+            }
+        }
+        return false;
     }
 
     public boolean validate() {
@@ -64,6 +115,7 @@ public class CliValidator {
                     System.err.println("Can't create output dir " + targetDir.getPath());
                     return false;
                 }
+                isFileAllowed(zipFile);
                 System.out.println("Decompress mode " + sourceVal + " " + targetVal);
 
                 settings.setCompress(false);
