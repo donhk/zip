@@ -20,6 +20,28 @@ public class SetupBuilder {
 
     public void decompress() throws IOException, InterruptedException {
         //parameters looks valid
+        switch (settings.getFileType()) {
+            case "zip":
+                break;
+            case "7z":
+                break;
+            case "tar":
+                break;
+            case "tar.gz":
+                break;
+            case "bz2":
+                break;
+            case "z":
+                break;
+            case "tar.z":
+                break;
+            case "xz":
+                break;
+            case "lzma":
+                break;
+            case "arj":
+                break;
+        }
         long a = System.currentTimeMillis();
         Zip jZip = new Zip(source.getCanonicalPath(), target.getCanonicalPath());
         if (!jZip.prepare()) {

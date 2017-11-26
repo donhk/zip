@@ -3,6 +3,7 @@ package com.donhk.config;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import org.apache.commons.cli.*;
+import org.apache.commons.io.FilenameUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -40,17 +41,28 @@ public class CliValidator {
             raf = new RandomAccessFile(file, "r");
             long firsBytes = raf.readInt();
             for (String fileType : allowedFileTypes.keySet()) {
+                //review the known signatures
                 for (long sign : allowedFileTypes.get(fileType)) {
+                    //is this a known file?
                     if (sign == firsBytes) {
-                        System.out.println("File is allowed " + fileType);
+                        settings.setFileType(fileType);
+                        return true;
                     }
                 }
-
             }
-
-        } catch (FileNotFoundException e) {
-            return false;
-        } catch (IOException ioex) {
+            //if we reach this point we know that we can't determine
+            //the file type with the file signature, let's use the manual
+            //fashion
+            String fileType = FilenameUtils.getExtension(file.getAbsolutePath());
+            //is this file type supported?
+            if (allowedFileTypes.containsKey(fileType)) {
+                settings.setFileType(fileType);
+                return true;
+            } else {
+                //we don't support this extension
+                return false;
+            }
+        } catch (Exception e) {
             return false;
         } finally {
             if (raf != null) {
@@ -61,12 +73,11 @@ public class CliValidator {
                 }
             }
         }
-        return false;
     }
 
     public boolean validate() {
-        File zipFile;
-        File targetDir;
+        File compressedFile;
+        File directoryLocation;
 
         Options decompressOpt = new Options();
         Options compressOpt = new Options();
@@ -101,52 +112,70 @@ public class CliValidator {
             }
 
             cmd = parser.parse(decompressOpt, args, true);
-            if (cmd.hasOption("i")) {
+            if (cmd.hasOption("i") && cmd.hasOption("o")) {
+                //get argument values
                 String sourceVal = cmd.getOptionValue("i");
                 String targetVal = cmd.getOptionValue("o");
-                zipFile = new File(sourceVal);
-                targetDir = new File(targetVal);
-                if (!zipFile.canRead()) {
-                    System.err.println("Can't read input file " + zipFile.getPath());
+                //create file objects
+                compressedFile = new File(sourceVal);
+                directoryLocation = new File(targetVal);
+                if (!compressedFile.canRead()) {
+                    System.err.println("Can't read input file " + compressedFile.getPath());
                     return false;
                 }
 
-                if (!targetDir.isDirectory() && !targetDir.mkdirs()) {
-                    System.err.println("Can't create output dir " + targetDir.getPath());
+                if (!directoryLocation.isDirectory() && !directoryLocation.mkdirs()) {
+                    System.err.println("Can't create output dir " + directoryLocation.getPath());
                     return false;
                 }
-                isFileAllowed(zipFile);
-                System.out.println("Decompress mode " + sourceVal + " " + targetVal);
+                //review is this file type is allowed
+                if (!isFileAllowed(compressedFile)) {
+                    System.err.println("This file type is not allowed " + directoryLocation.getPath());
+                    return false;
+                }
+                System.out.println("Decompress mode");
 
                 settings.setCompress(false);
                 settings.setDecompress(true);
-                settings.setSource(zipFile);
-                settings.setTarget(targetDir);
+                settings.setSource(compressedFile);
+                settings.setTarget(directoryLocation);
 
                 return true;
             }
 
             cmd = parser.parse(compressOpt, args, false);
-            if (cmd.hasOption("c")) {
+            if (cmd.hasOption("c") && cmd.hasOption("t")) {
+                //get argument values
                 String targetVal = cmd.getOptionValue("c");
                 String sourceVal = cmd.getOptionValue("t");
-                zipFile = new File(sourceVal);
-                targetDir = new File(targetVal);
-                if (!zipFile.canRead()) {
-                    System.err.println("Can't read input file " + zipFile.getPath());
+                //create file objects
+                compressedFile = new File(sourceVal);
+                directoryLocation = new File(targetVal);
+                try {
+                    if (!compressedFile.createNewFile()) {
+                        System.err.println("Can't create compressed file" + compressedFile.getPath());
+                        return false;
+                    }
+                } catch (IOException e) {
+                    System.err.println("Can't create compressed file" + compressedFile.getPath());
                     return false;
                 }
 
-                if (!targetDir.isDirectory() && !targetDir.mkdirs()) {
-                    System.err.println("Can't create output dir " + targetDir.getPath());
+                if (!directoryLocation.canRead()) {
+                    System.err.println("Can't read the target dir " + directoryLocation.getPath());
                     return false;
                 }
-                System.out.println("Compress mode " + sourceVal + " " + targetVal);
+                //review is this file type is allowed
+                if (!isFileAllowed(compressedFile)) {
+                    System.err.println("This file type is not allowed " + compressedFile.getPath());
+                    return false;
+                }
+                System.out.println("Compress mode");
 
                 settings.setCompress(true);
                 settings.setDecompress(false);
-                settings.setSource(zipFile);
-                settings.setTarget(targetDir);
+                settings.setSource(compressedFile);
+                settings.setTarget(directoryLocation);
 
                 return true;
             }
